@@ -7,7 +7,6 @@ import {
   DEFAULT_WORKER_NAME,
   LAST_WORKER_STORAGE_KEY,
   ONBOARDING_INTENT_STORAGE_KEY,
-  OPENWORK_APP_CONNECT_BASE_URL,
   PENDING_SOCIAL_SIGNUP_STORAGE_KEY,
   WORKER_STATUS_POLL_MS,
   type AuthMethod,
@@ -54,6 +53,7 @@ import {
   resolveOpenworkWorkspaceUrl,
   trackPosthogEvent
 } from "../_lib/den-flow";
+import { EMPTY_RUNTIME_CONFIG, getRuntimeConfig, type DenWebRuntimeConfig } from "../_lib/runtime-config";
 import {
   PENDING_ORG_INVITATION_STORAGE_KEY,
   getJoinOrgRoute,
@@ -126,6 +126,7 @@ type DenFlowContextValue = {
   runtimeUpgradeBusy: boolean;
   copiedField: string | null;
   events: LaunchEvent[];
+  runtimeConfig: DenWebRuntimeConfig;
   openworkDeepLink: string | null;
   openworkAppConnectUrl: string | null;
   hasWorkspaceScopedUrl: boolean;
@@ -215,6 +216,7 @@ export function DenFlowProvider({ children }: { children: ReactNode }) {
   const [runtimeBusy, setRuntimeBusy] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [runtimeUpgradeBusy, setRuntimeUpgradeBusy] = useState(false);
+  const [runtimeConfig, setRuntimeConfig] = useState<DenWebRuntimeConfig>(EMPTY_RUNTIME_CONFIG);
 
   const [onboardingIntent, setOnboardingIntent] = useState<OnboardingIntent | null>(null);
   const onboardingAutoLaunchKeyRef = useRef<string | null>(null);
@@ -238,7 +240,7 @@ export function DenFlowProvider({ children }: { children: ReactNode }) {
     activeWorker?.workerName ?? null
   );
   const openworkAppConnectUrl = buildOpenworkAppConnectUrl(
-    OPENWORK_APP_CONNECT_BASE_URL,
+    runtimeConfig.openworkAppConnectUrl,
     openworkConnectUrl,
     preferredOpenworkToken,
     activeWorker?.workerId ?? null,
@@ -1091,7 +1093,7 @@ export function DenFlowProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
-      const callbackURL = getSocialCallbackUrl();
+      const callbackURL = getSocialCallbackUrl(runtimeConfig.openworkAuthCallbackUrl);
       const { response, payload } = await requestJson("/api/auth/sign-in/social", {
         method: "POST",
         body: JSON.stringify({
@@ -1650,6 +1652,20 @@ export function DenFlowProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    let cancelled = false;
+
+    void getRuntimeConfig().then((config) => {
+      if (!cancelled) {
+        setRuntimeConfig(config);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
@@ -1997,6 +2013,7 @@ export function DenFlowProvider({ children }: { children: ReactNode }) {
     runtimeUpgradeBusy,
     copiedField,
     events,
+    runtimeConfig,
     openworkDeepLink,
     openworkAppConnectUrl,
     hasWorkspaceScopedUrl,

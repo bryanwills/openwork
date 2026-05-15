@@ -83,13 +83,17 @@ app.get(
     tags: ["System"],
     hide: true,
     summary: "Redirect API root",
-    description: "Redirects the API root to the OpenWork marketing site instead of serving API content.",
+    description: "Redirects the API root when DEN_MARKETING_URL is configured; otherwise returns a lightweight service payload.",
     responses: {
-      302: emptyResponse("Redirect to the OpenWork marketing site."),
+      200: jsonResponse("API root service payload.", healthResponseSchema),
+      302: emptyResponse("Redirect to the configured marketing site."),
     },
   }),
   (c) => {
-    return c.redirect("https://openworklabs.com", 302)
+    if (env.marketingUrl) {
+      return c.redirect(env.marketingUrl, 302)
+    }
+    return c.json({ ok: true, service: "den-api" })
   },
 )
 
@@ -152,9 +156,7 @@ app.get(
           "Swagger tip: use the security schemes in the Authorize dialog to set either `bearerAuth` or `denApiKey` before trying protected endpoints.",
         ].join("\n"),
       },
-      servers: [
-        { url: "https://api.openworklabs.com" },
-      ],
+      servers: env.apiPublicUrl ? [{ url: env.apiPublicUrl }] : [],
       tags: [
         { name: "System", description: "Service health and operational routes." },
         { name: "Organizations", description: "Top-level organization creation and context routes." },

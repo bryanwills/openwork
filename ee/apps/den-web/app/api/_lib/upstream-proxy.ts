@@ -1,13 +1,10 @@
 import { NextRequest } from "next/server";
 
-const DEFAULT_API_BASE = "https://api.openworklabs.com";
-const DEFAULT_AUTH_ORIGIN = "https://app.openworklabs.com";
-const DEFAULT_AUTH_FALLBACK_BASE = "https://den-control-plane-openwork.onrender.com";
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 
-const apiBase = normalizeBaseUrl(process.env.DEN_API_BASE ?? DEFAULT_API_BASE);
-const authOrigin = normalizeBaseUrl(process.env.DEN_AUTH_ORIGIN ?? DEFAULT_AUTH_ORIGIN);
-const authFallbackBase = normalizeBaseUrl(process.env.DEN_AUTH_FALLBACK_BASE ?? DEFAULT_AUTH_FALLBACK_BASE);
+const apiBase = readBaseUrlEnv("DEN_API_BASE");
+const authOrigin = readBaseUrlEnv("DEN_AUTH_ORIGIN");
+const authFallbackBase = readBaseUrlEnv("DEN_AUTH_FALLBACK_BASE");
 const appPort = process.env.OPENWORK_APP_PORT?.trim() || process.env.PORT?.trim() || "5173";
 const configuredCorsOrigins = splitCsv(process.env.DEN_CORS_ORIGINS ?? process.env.CORS_ORIGINS);
 const localDevCorsOrigins = process.env.OPENWORK_DEV_MODE === "1"
@@ -23,6 +20,11 @@ type ProxyOptions = {
 
 function normalizeBaseUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
+}
+
+function readBaseUrlEnv(name: string): string | null {
+  const value = process.env[name]?.trim();
+  return value ? normalizeBaseUrl(value) : null;
 }
 
 function splitCsv(value: string | undefined): string[] {
@@ -209,7 +211,7 @@ function buildHeaders(request: NextRequest, contentType: string | null): Headers
     headers.set("accept", "application/json");
   }
 
-  if (!headers.has("origin")) {
+  if (!headers.has("origin") && authOrigin) {
     headers.set("origin", authOrigin);
   }
 
@@ -275,6 +277,7 @@ function rewriteLocationHeader(location: string, request: NextRequest): string {
 
   const requestOrigin = new URL(request.url).origin;
   const rewriteableOrigins = [apiBase, authFallbackBase]
+    .filter((value): value is string => Boolean(value))
     .map((value) => {
       try {
         return new URL(value).origin;
@@ -330,9 +333,17 @@ export async function proxyUpstream(
   segments: string[] = [],
   options: ProxyOptions,
 ): Promise<Response> {
+  if (!apiBase || !authOrigin) {
+    const response = buildUpstreamErrorResponse(503, "DEN_API_BASE and DEN_AUTH_ORIGIN must be configured.");
+    applyCorsHeaders(request, response.headers);
+    return response;
+  }
+
   const targetPath = getTargetPath(request, segments, options.routePrefix);
   const primaryTargetUrl = buildTargetUrl(apiBase, request, targetPath, options.upstreamPathPrefix);
-  const fallbackTargetUrl = buildTargetUrl(authFallbackBase, request, targetPath, options.upstreamPathPrefix);
+  const fallbackTargetUrl = authFallbackBase
+    ? buildTargetUrl(authFallbackBase, request, targetPath, options.upstreamPathPrefix)
+    : null;
   const contentType = request.headers.get("content-type");
   const requestBody = request.method !== "GET" && request.method !== "HEAD"
     ? new Uint8Array(await request.arrayBuffer())
@@ -343,7 +354,7 @@ export async function proxyUpstream(
   try {
     upstream = await fetchUpstream(request, primaryTargetUrl, contentType, requestBody);
   } catch {
-    if (apiBase !== authFallbackBase) {
+    if (fallbackTargetUrl && apiBase !== authFallbackBase) {
       try {
         upstream = await fetchUpstream(request, fallbackTargetUrl, contentType, requestBody);
       } catch {}
@@ -357,7 +368,7 @@ export async function proxyUpstream(
   }
 
   if (isEventStreamRequest(request) || isEventStreamResponse(upstream)) {
-    if (apiBase !== authFallbackBase && shouldFallbackToAuthBaseForStream(upstream, targetPath)) {
+    if (fallbackTargetUrl && apiBase !== authFallbackBase && shouldFallbackToAuthBaseForStream(upstream, targetPath)) {
       try {
         upstream = await fetchUpstream(request, fallbackTargetUrl, contentType, requestBody);
       } catch {}
@@ -367,7 +378,7 @@ export async function proxyUpstream(
 
   let body = await readUpstreamBody(upstream);
 
-  if (apiBase !== authFallbackBase && shouldFallbackToAuthBase(upstream, body, targetPath)) {
+  if (fallbackTargetUrl && apiBase !== authFallbackBase && shouldFallbackToAuthBase(upstream, body, targetPath)) {
     try {
       upstream = await fetchUpstream(request, fallbackTargetUrl, contentType, requestBody);
       body = await readUpstreamBody(upstream);

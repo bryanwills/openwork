@@ -45,7 +45,7 @@ import {
 import { useOrgDashboard } from "../_providers/org-dashboard-provider";
 import { buildDenFeedbackUrl } from "../../_lib/feedback";
 
-const OPENWORK_DOCS_URL = "https://openworklabs.com/docs";
+const OPENWORK_DOCS_URL = "/docs";
 
 function OrgMark({ name }: { name: string }) {
   const initials = useMemo(() => {

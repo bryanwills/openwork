@@ -29,9 +29,14 @@ const EnvSchema = z.object({
   SMTP_PASS: z.string().optional(),
   SMTP_SECURE: z.string().optional(),
   LOOPS_API_KEY: z.string().optional(),
+  LOOPS_MARKETING_ENABLED: z.string().optional(),
   OPENWORK_DEV_MODE: z.string().optional(),
   PORT: z.string().optional(),
   CORS_ORIGINS: z.string().optional(),
+  DEN_API_PUBLIC_URL: z.string().optional(),
+  DEN_DESKTOP_DEN_BASE_URL: z.string().optional(),
+  DEN_MARKETING_URL: z.string().optional(),
+  DEN_MCP_CLAIM_NAMESPACE: z.string().optional(),
   WORKER_PROXY_PORT: z.string().optional(),
   PROVISIONER_MODE: z.enum(["stub", "render", "daytona"]).optional(),
   WORKER_URL_TEMPLATE: z.string().optional(),
@@ -116,6 +121,18 @@ const EnvSchema = z.object({
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `${key} is required when using planetscale mode`,
+          path: [key],
+        })
+      }
+    }
+  }
+
+  if (value.PROVISIONER_MODE === "daytona") {
+    for (const key of ["DAYTONA_API_KEY", "DAYTONA_WORKER_PROXY_BASE_URL"] as const) {
+      if (!value[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${key} is required when PROVISIONER_MODE=daytona`,
           path: [key],
         })
       }
@@ -211,11 +228,16 @@ export const env = {
   },
   loops: {
     apiKey: optionalString(parsed.LOOPS_API_KEY),
+    marketingEnabled: parsed.LOOPS_MARKETING_ENABLED?.trim() === "1",
   },
   port,
   workerProxyPort: Number(parsed.WORKER_PROXY_PORT ?? "8789"),
   corsOrigins,
-  provisionerMode: parsed.PROVISIONER_MODE ?? "daytona",
+  apiPublicUrl: optionalString(parsed.DEN_API_PUBLIC_URL),
+  desktopDenBaseUrl: optionalString(parsed.DEN_DESKTOP_DEN_BASE_URL),
+  marketingUrl: optionalString(parsed.DEN_MARKETING_URL),
+  mcpClaimNamespace: normalizeOrigin(optionalString(parsed.DEN_MCP_CLAIM_NAMESPACE) ?? parsed.BETTER_AUTH_URL),
+  provisionerMode: parsed.PROVISIONER_MODE ?? "stub",
   workerUrlTemplate: parsed.WORKER_URL_TEMPLATE,
   workerActivityBaseUrl:
     optionalString(parsed.WORKER_ACTIVITY_BASE_URL) ??
@@ -235,6 +257,7 @@ export const env = {
     apiKey: parsed.RENDER_API_KEY,
     ownerId: parsed.RENDER_OWNER_ID,
     workerRepo:
+      // TODO(ent): require RENDER_WORKER_REPO for hosted/customer Render deployments instead of using OpenWork's public repo default.
       parsed.RENDER_WORKER_REPO ?? "https://github.com/different-ai/openwork",
     workerBranch: parsed.RENDER_WORKER_BRANCH ?? "dev",
     workerRootDir:
@@ -293,7 +316,7 @@ export const env = {
       parsed.DAYTONA_SIGNED_PREVIEW_EXPIRES_SECONDS ?? "86400",
     ),
     workerProxyBaseUrl:
-      optionalString(parsed.DAYTONA_WORKER_PROXY_BASE_URL) ?? "https://workers.den.openworklabs",
+      optionalString(parsed.DAYTONA_WORKER_PROXY_BASE_URL) ?? "http://workers.local",
     sandboxNamePrefix:
       optionalString(parsed.DAYTONA_SANDBOX_NAME_PREFIX) ?? "den-daytona-worker",
     sharedVolumeName:

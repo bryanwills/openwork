@@ -51,9 +51,9 @@ export const DEN_MCP_RESOURCES = Array.from(new Set([
   ...localMcpResourceAliases(DEN_MCP_RESOURCE),
 ]));
 export const DEN_MCP_SCOPES = ["openid", "profile", "email", "offline_access", "mcp:read", "mcp:write"];
-export const DEN_MCP_TOKEN_USE_CLAIM = "https://openworklabs.com/token_use";
-export const DEN_MCP_ORG_ID_CLAIM = "https://openworklabs.com/org_id";
-export const DEN_MCP_RESOURCE_CLAIM = "https://openworklabs.com/resource";
+export const DEN_MCP_TOKEN_USE_CLAIM = `${env.mcpClaimNamespace}/token_use`;
+export const DEN_MCP_ORG_ID_CLAIM = `${env.mcpClaimNamespace}/org_id`;
+export const DEN_MCP_RESOURCE_CLAIM = `${env.mcpClaimNamespace}/resource`;
 export const DEN_MCP_OPAQUE_ACCESS_TOKEN_PREFIX = "ow_mcp_at_";
 
 const socialProviders = {

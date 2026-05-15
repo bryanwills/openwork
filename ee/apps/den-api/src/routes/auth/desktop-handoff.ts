@@ -7,6 +7,7 @@ import { describeRoute } from "hono-openapi"
 import { z } from "zod"
 import { jsonValidator, requireUserMiddleware } from "../../middleware/index.js"
 import { db } from "../../db.js"
+import { env } from "../../env.js"
 import { denTypeIdSchema, invalidRequestSchema, jsonResponse, notFoundSchema, unauthorizedSchema } from "../../openapi.js"
 import type { AuthContextVariables } from "../../session.js"
 
@@ -109,7 +110,7 @@ function resolveDesktopDenBaseUrl(request: Request) {
   const protocol = forwardedProto ?? new URL(request.url).protocol.replace(/:$/, "")
   const targetHost = forwardedHost ?? host
   if (!targetHost) {
-    return "https://app.openworklabs.com/api/den"
+    return env.desktopDenBaseUrl ?? `${env.betterAuthUrl}/api/den`
   }
 
   const origin = `${protocol}://${targetHost}`

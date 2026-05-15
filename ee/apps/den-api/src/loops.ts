@@ -18,7 +18,7 @@ export async function syncDenSignupContact(input: {
   name?: string | null
 }) {
   const apiKey = env.loops.apiKey
-  if (!apiKey) {
+  if (!env.loops.marketingEnabled || !apiKey) {
     return
   }
 
@@ -71,7 +71,7 @@ export async function sendSubscribedToDenEvent(input: {
   name?: string | null
 }) {
   const apiKey = env.loops.apiKey
-  if (!apiKey) {
+  if (!env.loops.marketingEnabled || !apiKey) {
     return
   }
 

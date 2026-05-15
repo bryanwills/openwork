@@ -21,6 +21,8 @@ COPY ee/apps/den-web /app/ee/apps/den-web
 
 WORKDIR /app/ee/apps/den-web
 
+RUN pnpm run build
+
 EXPOSE 3005
 
-CMD ["sh", "-lc", "pnpm run build && pnpm run start"]
+CMD ["sh", "-lc", "/app/ee/apps/den-web/node_modules/.bin/next start --hostname 0.0.0.0 --port ${PORT:-3005}"]

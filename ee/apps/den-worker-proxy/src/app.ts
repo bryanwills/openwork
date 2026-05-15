@@ -32,6 +32,8 @@ type WorkerTokenScope = typeof WorkerTokenTable.$inferSelect.scope
 
 const refreshPromises = new Map<WorkerId, Promise<string | null>>()
 
+app.get("/health", (c) => c.json({ ok: true, service: "den-worker-proxy" }))
+
 function assertDaytonaConfig() {
   if (!env.daytona.apiKey) {
     throw new Error("DAYTONA_API_KEY is required for worker proxy")
@@ -327,7 +329,10 @@ async function proxyRequest(workerId: WorkerId, request: Request) {
 app.all("*", async (c) => {
   const requestUrl = new URL(c.req.url)
   if (requestUrl.pathname === "/") {
-    return Response.redirect("https://openworklabs.com", 302)
+    if (env.marketingUrl) {
+      return Response.redirect(env.marketingUrl, 302)
+    }
+    return c.json({ ok: true, service: "den-worker-proxy" })
   }
 
   if (c.req.method === "OPTIONS") {

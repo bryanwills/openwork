@@ -158,8 +158,6 @@ export const ONBOARDING_INTENT_STORAGE_KEY = "openwork:web:onboarding-intent";
 export const WORKER_STATUS_POLL_MS = DEN_WORKER_POLL_INTERVAL_MS;
 export const DEFAULT_AUTH_NAME = "OpenWork User";
 export const DEFAULT_WORKER_NAME = "My Worker";
-export const OPENWORK_APP_CONNECT_BASE_URL = (process.env.NEXT_PUBLIC_OPENWORK_APP_CONNECT_URL ?? "").trim();
-export const OPENWORK_AUTH_CALLBACK_BASE_URL = (process.env.NEXT_PUBLIC_OPENWORK_AUTH_CALLBACK_URL ?? "").trim();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -244,9 +242,12 @@ export function deriveOnboardingWorkerName(user: AuthUser): string {
   return normalizeWorkerName(`${owner}${suffix}`);
 }
 
-export function getSocialCallbackUrl(): string {
+export function getSocialCallbackUrl(authCallbackBaseUrl = ""): string {
   try {
-    const origin = typeof window !== "undefined" ? window.location.origin : OPENWORK_AUTH_CALLBACK_BASE_URL || "https://app.openworklabs.com";
+    const origin = authCallbackBaseUrl || (typeof window !== "undefined" ? window.location.origin : "");
+    if (!origin) {
+      return "/";
+    }
     const callbackUrl = new URL("/", origin);
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -259,7 +260,14 @@ export function getSocialCallbackUrl(): string {
     }
     return callbackUrl.toString();
   } catch {
-    return "https://app.openworklabs.com/";
+    if (authCallbackBaseUrl) {
+      try {
+        return new URL("/", authCallbackBaseUrl).toString();
+      } catch {
+        // Fall through to the hosted default when the configured URL is invalid.
+      }
+    }
+    return typeof window !== "undefined" ? `${window.location.origin}/` : "/";
   }
 }
 
