@@ -19,10 +19,18 @@ pnpm dev:den-docker
 What it does:
 - Starts **MySQL** for the Den service
 - Starts **Den control plane** on port 8788 inside Docker with `PROVISIONER_MODE=stub`
-- Runs **Den migrations** automatically before the API starts
+- Runs **Den migrations** automatically before the API starts in the local compose stack
 - Starts the **OpenWork Cloud web app** on port 3005 inside Docker
 - Points the web app's auth + API proxy routes at the local Den service
 - Prints randomized host URLs so multiple stacks can run side by side
+
+Production-oriented EE images:
+- `Dockerfile.den` -> `ghcr.io/different-ai/openwork-den-api`
+- `Dockerfile.den-web` -> `ghcr.io/different-ai/openwork-den-web`
+- `Dockerfile.den-worker-proxy` -> `ghcr.io/different-ai/openwork-den-worker-proxy`
+- `Dockerfile.inference` -> `ghcr.io/different-ai/openwork-inference`
+
+These images are intended for Terraform, Helm, ECS, EKS, and customer-cloud deployments. Prefer immutable tags or digests in production.
 
 ### Demo org seed
 

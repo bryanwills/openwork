@@ -4,6 +4,8 @@ RUN corepack enable
 
 WORKDIR /app
 
+ENV PORT=8789
+
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /app/
 COPY .npmrc /app/.npmrc
 COPY patches /app/patches
@@ -25,4 +27,4 @@ RUN pnpm --dir /app/ee/apps/den-worker-proxy run build
 
 EXPOSE 8789
 
-CMD ["sh", "-lc", "node ee/apps/den-worker-proxy/dist/server.js"]
+CMD ["sh", "-lc", "node /app/ee/apps/den-worker-proxy/dist/server.js"]

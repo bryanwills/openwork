@@ -30,23 +30,20 @@ Frontend for `app.openworklabs.com`.
 
 ### Optional env vars
 
-- `DEN_API_BASE` (server-only): upstream API base used by proxy route.
-  - default: `https://api.openworklabs.com`
-- `DEN_AUTH_ORIGIN` (server-only): Origin header sent to Better Auth endpoints when the browser request does not include one.
-  - default: `https://app.openworklabs.com`
+- `DEN_API_BASE` (server-only): upstream API base used by proxy routes. Required outside local dev wrappers.
+- `DEN_AUTH_ORIGIN` (server-only): Origin header sent to Better Auth endpoints when the browser request does not include one. Required outside local dev wrappers.
 - `DEN_AUTH_FALLBACK_BASE` (server-only): fallback Den origin used if `DEN_API_BASE` serves an HTML/5xx error.
-  - default: `https://den-control-plane-openwork.onrender.com`
-- `NEXT_PUBLIC_OPENWORK_APP_CONNECT_URL` (client): Base URL for "Open in App" links.
+- `DEN_WEB_PUBLIC_ORIGIN` (server/runtime): public origin used for metadata.
+- `DEN_WEB_OPENWORK_APP_CONNECT_URL` (runtime): Base URL for "Open in App" links.
   - Example: `https://openworklabs.com/app`
   - The web panel appends `/connect-remote` and injects worker URL/token params automatically.
-- `NEXT_PUBLIC_OPENWORK_AUTH_CALLBACK_URL` (client): Canonical URL used for GitHub auth callback redirects.
-  - default: `https://app.openworklabs.com`
+- `DEN_WEB_OPENWORK_AUTH_CALLBACK_URL` (runtime): Canonical URL used for GitHub auth callback redirects.
   - this host must serve `/api/auth/*`; the included proxy route does that
-- `NEXT_PUBLIC_POSTHOG_KEY` (client): PostHog project key used for Den analytics.
-  - optional override; defaults to the same project key used by `ee/apps/landing`
-- `NEXT_PUBLIC_POSTHOG_HOST` (client): PostHog ingest host or same-origin proxy path.
+- `DEN_WEB_POSTHOG_KEY` (server/runtime): PostHog project key used for Den analytics.
+- `DEN_WEB_POSTHOG_HOST` (server/runtime): PostHog ingest host or same-origin proxy path.
   - default: `/ow`
   - set it to `https://us.i.posthog.com` to bypass the local proxy
+- `GET /api/health` returns a shallow app health payload for container probes.
 
 ## Deploy on Vercel
 
