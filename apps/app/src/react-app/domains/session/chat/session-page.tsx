@@ -220,7 +220,7 @@ function isTrackableAccessibleTarget(target: OpenTarget) {
   return isCollectibleArtifactTarget(target) || isLocalhostBrowserTarget(target);
 }
 
-function absoluteWorkspacePath(root: string, value: string) {
+function absoluteWorkspacePath(root: string | null | undefined, value: string) {
   const target = value.trim();
   if (!target) return "";
   if (/^file:\/\//i.test(target)) {
@@ -231,7 +231,7 @@ function absoluteWorkspacePath(root: string, value: string) {
     }
   }
   if (target.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(target)) return target;
-  const cleanRoot = root.trim().replace(/[/\\]+$/, "");
+  const cleanRoot = root?.trim().replace(/[/\\]+$/, "") ?? "";
   const cleanTarget = target.replace(/^[.][\\/]/, "");
   return cleanRoot ? `${cleanRoot}/${cleanTarget}` : cleanTarget;
 }
