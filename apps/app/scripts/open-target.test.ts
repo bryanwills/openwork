@@ -75,6 +75,15 @@ describe("deriveOpenTargets", () => {
     expect(targets[0]).toMatchObject({ value: "reports/summary.md", preview: "markdown", confidence: 95 });
   });
 
+  it("extracts generated text files as collectible targets", () => {
+    const target = deriveOpenTargets([
+      toolMessage("msg_tool", "write", { filePath: "src/generated.ts" }, { filePath: "src/generated.ts" }),
+    ])[0];
+
+    expect(target).toMatchObject({ value: "src/generated.ts", preview: "text", confidence: 95 });
+    expect(target ? isCollectibleArtifactTarget({ ...target, exists: true }) : false).toBe(true);
+  });
+
   it("extracts PowerPoint decks from assistant artifact summaries", () => {
     const targets = deriveOpenTargets([
       message("msg_1", "assistant", "Updated file: decks/openwork-vertebrae-deck.pptx"),

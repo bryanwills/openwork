@@ -18,6 +18,8 @@ import {
 import { bundledLanguages, codeToHtml } from "shiki";
 
 import { cn } from "@/lib/utils";
+import { useOpenTargets } from "@/lib/target-provider";
+import type { OpenTarget } from "@/react-app/domains/session/artifacts/open-target";
 
 import { applyTextHighlights } from "./text-highlights";
 
@@ -84,6 +86,8 @@ function createEmojiAliases() {
 
 const emojiAliases = createEmojiAliases();
 const MARKDOWN_IMAGE_PREVIEW_MAX_HEIGHT = 100;
+const WORKSPACES_PREFIX_PATTERN = /^workspaces\/[^/]+\//i;
+const WORKSPACE_ID_PREFIX_PATTERN = /^workspace\/(?:ws_[^/]+|\d+|[0-9a-f-]{6,})\//i;
 
 function parseShikiLanguage(lang: string) {
   const normalized = lang.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
@@ -92,6 +96,46 @@ function parseShikiLanguage(lang: string) {
 
 function hasFencedCodeBlock(text: string) {
   return /(^|\n)```/.test(text);
+}
+
+function normalizeOpenTargetLink(value: string) {
+  const withoutHash = value.trim().split("#")[0] ?? "";
+  const withoutQuery = withoutHash.split("?")[0] ?? "";
+  let decoded = withoutQuery;
+
+  try {
+    decoded = decodeURIComponent(withoutQuery);
+  } catch {
+    decoded = withoutQuery;
+  }
+
+  if (/^file:\/\//i.test(decoded)) {
+    try {
+      decoded = new URL(decoded).pathname;
+    } catch {
+      decoded = decoded.replace(/^file:\/\//i, "");
+    }
+  }
+
+  return decoded
+    .replace(/[\\]+/g, "/")
+    .replace(/^\.\//, "")
+    .replace(WORKSPACES_PREFIX_PATTERN, "")
+    .replace(WORKSPACE_ID_PREFIX_PATTERN, "")
+    .replace(/\/$/, "");
+}
+
+function linkMatchesTarget(href: string, target: OpenTarget) {
+  const normalizedHref = normalizeOpenTargetLink(href).toLowerCase();
+  const normalizedTarget = normalizeOpenTargetLink(target.value).toLowerCase();
+
+  if (!normalizedHref || !normalizedTarget) return false;
+  if (target.kind === "url") return normalizedHref === normalizedTarget;
+  return normalizedHref === normalizedTarget || normalizedHref.endsWith(`/${normalizedTarget}`) || normalizedTarget.endsWith(`/${normalizedHref}`);
+}
+
+function openTargetForHref(href: string, targets: OpenTarget[]) {
+  return targets.find((target) => linkMatchesTarget(href, target)) ?? null;
 }
 
 function estimatedRenderedImageHeight(image: HTMLImageElement) {
@@ -137,6 +181,7 @@ function sanitizeMarkdownHtml(value: string) {
       "data-openwork-image-preview",
       "data-openwork-image-toggle",
       "data-openwork-image-toggle-label",
+      "data-openwork-link-href",
       "data-openwork-shiki",
       "decoding",
       "disabled",
@@ -209,9 +254,10 @@ const baseMarkedOptions = {
     },
     link({ href, title, tokens }) {
       const safe = escapeAttribute(safeHref(href));
+      const raw = escapeAttribute(href);
       const titleAttr = title ? ` title="${escapeAttribute(title)}"` : "";
 
-      return `<a href="${safe}"${titleAttr} target="_blank" rel="noreferrer noopener" class="text-indigo-10 underline underline-offset-2 transition-colors hover:text-indigo-8">${this.parser.parseInline(tokens)}</a>`;
+      return `<a href="${safe}" data-openwork-link-href="${raw}"${titleAttr} target="_blank" rel="noreferrer noopener" class="text-indigo-10 underline underline-offset-2 transition-colors hover:text-indigo-8">${this.parser.parseInline(tokens)}</a>`;
     },
     image({ href, title, text }) {
       const safe = escapeAttribute(safeHref(href));
@@ -302,6 +348,7 @@ function MarkdownBlockInner({
   ...props
 }: MarkdownBlockInnerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const { openTargets, onOpenTarget } = useOpenTargets();
   const syncHtml = useMemo(() => {
     if (!text.trim()) {
       return "";
@@ -366,6 +413,18 @@ function MarkdownBlockInner({
     const handleClick = (event: MouseEvent) => {
       if (!(event.target instanceof Element)) return;
 
+      const link = event.target.closest("a[data-openwork-link-href]");
+      if (link instanceof HTMLAnchorElement) {
+        const href = link.dataset.openworkLinkHref ?? link.getAttribute("href") ?? "";
+        const target = openTargetForHref(href, openTargets);
+
+        if (target && onOpenTarget) {
+          event.preventDefault();
+          onOpenTarget(target, target.kind === "file" ? { external: true } : undefined);
+          return;
+        }
+      }
+
       const button = event.target.closest("[data-openwork-image-toggle]");
       if (!(button instanceof HTMLButtonElement)) return;
 
@@ -396,7 +455,7 @@ function MarkdownBlockInner({
       root.removeEventListener("load", handleLoad, true);
       root.removeEventListener("click", handleClick);
     };
-  }, [html]);
+  }, [html, onOpenTarget, openTargets]);
 
   if (!html) {
     return null;
