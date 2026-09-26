@@ -4,6 +4,7 @@ const { withBotId } = require("botid/next/config");
 const mintlifyOrigin = "https://differentai.mintlify.dev";
 
 const ALIAS_HOSTS = [
+  "www.openworklabs.com",
   "openwork.software",
   "www.openwork.software",
   "openworkapp.com",
