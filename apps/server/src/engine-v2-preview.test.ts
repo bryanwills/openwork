@@ -241,6 +241,8 @@ async function withFakeSidecar(
   input: {
     reply: (path: string, method: string) => FakeSidecarReply | Promise<FakeSidecarReply>;
     providers?: Record<string, unknown>;
+    disabledProviders?: string[];
+    onSetProviders?: (specs: managedV2.OpencodeV2ProviderSpec[], disabled: string[] | undefined) => void;
     mcp?: Record<string, Record<string, unknown>>;
     waits?: Parameters<typeof createEngineV2Preview>[0]["waits"];
   },
@@ -251,7 +253,9 @@ async function withFakeSidecar(
   const fake = {
     url: "http://127.0.0.1:1", username: "opencode", password: "fixture", childPid: 1, exitCode: null, stdout: "", stderr: "",
     health: async () => ({ healthy: true, version: "fixture", pid: 1 }),
-    injectProvider: async () => {}, setProviders: async () => {}, setSkills: async () => {}, close: async () => {},
+    injectProvider: async () => {},
+    setProviders: async (specs: managedV2.OpencodeV2ProviderSpec[], disabled?: string[]) => { input.onSetProviders?.(specs, disabled); },
+    setSkills: async () => {}, close: async () => {},
     async fetchJson(path: string, init: { method?: string } = {}) {
       const method = init.method ?? "GET";
       calls.push(`${method} ${path}`);
@@ -261,7 +265,10 @@ async function withFakeSidecar(
   const spies = [
     spyOn(managedV2, "createManagedOpencodeV2Server").mockResolvedValue(fake),
     spyOn(localAuth, "readLocalProviderApiKeys").mockResolvedValue(new Map()),
-    spyOn(runtimeConfig, "readGlobalRuntimeOpencodeConfig").mockResolvedValue({ provider: input.providers ?? {} }),
+    spyOn(runtimeConfig, "readGlobalRuntimeOpencodeConfig").mockResolvedValue({
+      provider: input.providers ?? {},
+      ...(input.disabledProviders ? { disabled_providers: input.disabledProviders } : {}),
+    }),
     spyOn(runtimeConfig, "readEffectiveRuntimeOpencodeConfig").mockResolvedValue({ mcp: input.mcp ?? {} }),
   ];
   const previousBin = process.env.OPENWORK_OPENCODE2_BIN;
@@ -282,6 +289,23 @@ async function withFakeSidecar(
 }
 
 const orgProvider = { orga: { name: "Org A", options: { baseURL: "https://example.test/v1", apiKey: "fixture-key" }, models: { m1: { name: "M1" } } } };
+
+test("the v2 mirror applies the same disabled_providers as v1, so Disconnect hides OpenCode Zen in both engines", async () => {
+  const pushes: Array<{ ids: string[]; disabled: string[] | undefined }> = [];
+  await withFakeSidecar({
+    providers: { ...orgProvider, orgb: { name: "Org B", options: { baseURL: "https://b.example.test/v1", apiKey: "fixture-key" }, models: { m2: {} } } },
+    disabledProviders: ["opencode", "orgb"],
+    onSetProviders: (specs, disabled) => pushes.push({ ids: specs.map((spec) => spec.id), disabled }),
+    reply: (path) => path === "/api/model"
+      ? { status: 200, json: { data: [{ id: "m1", providerID: "orga" }] } }
+      : { status: 200, json: { data: [] } },
+  }, async (preview) => {
+    await preview.refreshProviders();
+    expect(pushes.at(-1)).toEqual({ ids: ["orga"], disabled: ["opencode", "orgb"] });
+    expect(preview.status().mirroredProviderIds).toEqual(["orga"]);
+    expect(preview.status().lastError).toBeUndefined();
+  });
+});
 
 test("folder readiness joins the provider push, not the slow catalog confirmation", async () => {
   const started = Date.now();

@@ -62,7 +62,12 @@ export interface ManagedOpencodeV2Server {
   health(): Promise<OpencodeV2Health>;
   fetchJson(path: string, init?: { method?: string; body?: unknown; directory?: string; timeoutMs?: number }): Promise<{ status: number; json: unknown }>;
   injectProvider(spec: OpencodeV2ProviderSpec): Promise<void>;
-  setProviders(specs: OpencodeV2ProviderSpec[]): Promise<void>;
+  /**
+   * Replace the mirrored providers. `disabledProviderIds` hides those
+   * providers (including built-ins such as OpenCode Zen) from the native
+   * catalog, matching v1 `disabled_providers`.
+   */
+  setProviders(specs: OpencodeV2ProviderSpec[], disabledProviderIds?: string[]): Promise<void>;
   /** Extra absolute skill directories registered through native config `skills`. */
   setSkills(directories: string[]): Promise<void>;
   close(): Promise<void>;
@@ -86,6 +91,8 @@ function diagnostics(exitCode: number | null, stdout: string, stderr: string): E
 /** The whole generated engine config: every writer emits all current keys. */
 export function renderOpencodeV2Config(input: {
   providers: OpencodeV2ProviderSpec[];
+  /** v1 `disabled_providers` equivalent; applied through the catalog filter plugin. */
+  disabledProviderIds?: string[];
   permissions?: EnginePermissionRule[];
   skills: string[];
   gatewayQuotaPluginDirectory?: string;
@@ -93,8 +100,10 @@ export function renderOpencodeV2Config(input: {
   contextPluginDirectory?: string;
   contextTools?: { url: string; token: string };
 }): Record<string, unknown> {
+  const disabled = new Set(input.disabledProviderIds ?? []);
+  const enabledProviders = input.providers.filter((provider) => !disabled.has(provider.id));
   const providerConfig: Record<string, unknown> = {};
-  for (const provider of input.providers) {
+  for (const provider of enabledProviders) {
     const models: Record<string, unknown> = {};
     for (const model of provider.models) {
       if ((provider.whitelist !== undefined && !provider.whitelist.includes(model.id)) || provider.blacklist?.includes(model.id)) continue;
@@ -133,12 +142,18 @@ export function renderOpencodeV2Config(input: {
       models,
     };
   }
-  const gatewayProviders = Object.fromEntries(input.providers.flatMap((provider) => {
+  const gatewayProviders = Object.fromEntries(enabledProviders.flatMap((provider) => {
     const base = gatewayBase(provider.id, provider.baseUrl);
     return base ? [[provider.id, base.href]] : [];
   }));
-  const filters = Object.fromEntries(input.providers.filter(provider => provider.whitelist !== undefined || provider.blacklist !== undefined)
-    .map(provider => [provider.id, { whitelist: provider.whitelist, blacklist: provider.blacklist }]));
+  const filters: Record<string, { whitelist?: string[]; blacklist?: string[] }> = Object.fromEntries(
+    enabledProviders.filter(provider => provider.whitelist !== undefined || provider.blacklist !== undefined)
+      .map(provider => [provider.id, { whitelist: provider.whitelist, blacklist: provider.blacklist }]),
+  );
+  // v2 config has no `disabled_providers`. An empty whitelist removes every
+  // model of a provider from the native catalog, built-in ones included, so a
+  // disconnected OpenCode Zen disappears here too and returns once re-enabled.
+  for (const id of disabled) filters[id] = { whitelist: [] };
   const plugins = [
     ...(input.contextTools && input.contextPluginDirectory ? [{ package: pathToFileURL(input.contextPluginDirectory).href, options: input.contextTools }] : []),
     ...(Object.keys(gatewayProviders).length && input.gatewayQuotaPluginDirectory ? [{
@@ -174,6 +189,7 @@ export async function createManagedOpencodeV2Server(
   let url = "";
   const providers = new Map<string, OpencodeV2ProviderSpec>();
   let skills: string[] = [];
+  let disabledProviderIds: string[] = [];
   let writes: Promise<void> = Promise.resolve();
   const opencodeModelsUrl = (options.env?.OPENCODE_MODELS_URL ?? process.env.OPENCODE_MODELS_URL)?.replace(/\/+$/, "");
   // The engine needs OS paths and locale settings, not the server's provider,
@@ -311,6 +327,7 @@ export async function createManagedOpencodeV2Server(
     const temporary = `${target}.tmp-${randomBytes(8).toString("hex")}`;
     await writeFile(temporary, `${JSON.stringify(renderOpencodeV2Config({
       providers: [...providers.values()],
+      disabledProviderIds,
       gatewayQuotaPluginDirectory,
       providerFiltersPluginDirectory,
       contextPluginDirectory,
@@ -357,11 +374,12 @@ export async function createManagedOpencodeV2Server(
       providers.set(spec.id, spec);
       await writeConfig();
     },
-    async setProviders(specs) {
+    async setProviders(specs, disabled = []) {
       providers.clear();
       for (const spec of specs) {
         providers.set(spec.id, spec);
       }
+      disabledProviderIds = [...new Set(disabled)].sort();
       await writeConfig();
     },
     async setSkills(directories) {

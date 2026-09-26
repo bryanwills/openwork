@@ -81,7 +81,7 @@ import {
   resolveGatewayProviderIds,
 } from "@/react-app/domains/connections/provider-auth/cloud-provider-config";
 import { createProviderAuthStore, useProviderAuthStoreSnapshot } from "@/react-app/domains/connections/provider-auth/store";
-import ProviderAuthModal from "@/react-app/domains/connections/provider-auth/provider-auth-modal";
+import ProviderAuthModal, { PROVIDER_LABELS } from "@/react-app/domains/connections/provider-auth/provider-auth-modal";
 import ConnectionsModals from "@/react-app/domains/connections/modals";
 import { AiSettingsView } from "@/react-app/domains/settings/pages/ai-view";
 // Side-effect imports: register extension config components into the registry.
@@ -564,6 +564,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const [themeMode, setThemeModeState] = useState<ThemeMode>(getInitialThemeMode);
   const [hideTitlebar, setHideTitlebar] = useState(() => readStoredBoolean(SETTINGS_HIDE_TITLEBAR_KEY, false));
   const [configActionStatus, setConfigActionStatus] = useState<string | null>(null);
+  const [enablingProviderId, setEnablingProviderId] = useState<string | null>(null);
   const [permissionsRefreshToken, setPermissionsRefreshToken] = useState(0);
   const [revealConfigBusy, setRevealConfigBusy] = useState(false);
   const [resetConfigBusy, setResetConfigBusy] = useState(false);
@@ -2010,6 +2011,13 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         }]
       : [],
   );
+  // Disconnect hides built-in/config providers through disabled_providers, and
+  // the engine then omits them everywhere. List them so they can come back.
+  const hiddenProviders = [...new Set(disabledProviders.map((id) => id.trim()).filter(Boolean))].flatMap((id) =>
+    isDesktopProviderBlocked({ providerId: id, checkRestriction: checkDesktopRestriction })
+      ? []
+      : [{ id, name: providers.find((provider) => provider.id === id)?.name ?? PROVIDER_LABELS[id.toLowerCase()] ?? id }],
+  );
   const openworkCloudMcpUrl = connectionsSnapshot.mcpServers.find(
     (server) => server.name === "openwork-cloud",
   )?.config.url ?? null;
@@ -2454,6 +2462,19 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             canDisconnectProvider={(provider) =>
               provider.id.trim().toLowerCase() === "opencode" || provider.source !== "env"
             }
+            disabledProviders={activeClient ? hiddenProviders : []}
+            enablingProviderId={enablingProviderId}
+            onEnableProvider={async (providerId) => {
+              setEnablingProviderId(providerId);
+              try {
+                const message = await providerAuthStore.enableProvider(providerId);
+                if (message.trim()) setConfigActionStatus(message);
+              } catch {
+                // The store publishes the error as providerAuthError.
+              } finally {
+                setEnablingProviderId(null);
+              }
+            }}
             canAddProviders={!providerAuthStore.isProviderAddRestricted()}
             organizationName={cloudSession.activeOrgName}
             cloudProviderIds={new Set([

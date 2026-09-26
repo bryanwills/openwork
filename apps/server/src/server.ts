@@ -3145,6 +3145,14 @@ function createRoutes(
     return jsonResponse(response);
   });
 
+  // OpenCode v2 keeps its engine config private, so clients read the shared
+  // disabled list here (ids only) to offer "Enable" for hidden providers.
+  addRoute(routes, "GET", "/workspace/:id/runtime-config/disabled-providers", "client", async (ctx) => {
+    await resolveWorkspace(config, ctx.params.id);
+    const runtime = await readGlobalRuntimeOpencodeConfig(config);
+    return jsonResponse({ ok: true, disabledProviders: runtimeDisabledProviderList(runtime) });
+  });
+
   addRoute(routes, "POST", "/workspace/:id/runtime-config/disabled-providers", "client", async (ctx) => {
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");

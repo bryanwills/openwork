@@ -21,6 +21,7 @@ import {
   onRuntimeOpencodeConfigWrite,
   readGlobalRuntimeOpencodeConfig,
   readEffectiveRuntimeOpencodeConfig,
+  runtimeDisabledProviderList,
   runtimeMcpMap,
   runtimeProviderMap,
 } from "./runtime-opencode-config-store.js";
@@ -502,20 +503,26 @@ export function createEngineV2Preview(options: {
   }
 
   async function pushAndConfirmProviders(active: ManagedOpencodeV2Server, pushed: () => void): Promise<void> {
-    const configured = runtimeProviderMap(await readGlobalRuntimeOpencodeConfig(config));
+    const globalRuntime = await readGlobalRuntimeOpencodeConfig(config);
+    const configured = runtimeProviderMap(globalRuntime);
+    // Same list v1 receives as `disabled_providers` (e.g. a disconnected
+    // OpenCode Zen). Re-enabling removes the entry and this mirror restores it.
+    const disabledProviderIds = runtimeDisabledProviderList(globalRuntime);
+    const disabled = new Set(disabledProviderIds);
     const localKeys = await readLocalProviderApiKeys();
     const providerMap = { ...await localProviderDefinitions(config, localKeys, configured), ...configured };
     const credentials = new Map((await options.env?.list() ?? []).map((entry) => [entry.key, entry.value]));
     const mapped = mapRuntimeProvidersToV2Specs(providerMap, credentials, localKeys);
-    const nextMirroredProviderIds = mapped.specs.map((spec) => spec.id);
-    await active.setProviders(mapped.specs);
-    mirroredSpecs = mapped.specs;
+    const specs = mapped.specs.filter((spec) => !disabled.has(spec.id));
+    const nextMirroredProviderIds = specs.map((spec) => spec.id);
+    await active.setProviders(specs, disabledProviderIds);
+    mirroredSpecs = specs;
     workspaceReadiness.clear();
     mirroredProviderIds = nextMirroredProviderIds;
     skippedProviderIds = [...mapped.skippedProviderIds];
     lastMirroredAt = new Date().toISOString();
     pushed();
-    const expectedModelIds = mapped.specs.flatMap((spec) => spec.models
+    const expectedModelIds = specs.flatMap((spec) => spec.models
       .filter(model => (spec.whitelist === undefined || spec.whitelist.includes(model.id)) && !spec.blacklist?.includes(model.id))
       .map((model) => model.id));
     const deadline = Date.now() + CATALOG_MIRROR_TIMEOUT_MS;
